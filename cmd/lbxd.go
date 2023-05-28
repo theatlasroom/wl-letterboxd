@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"strconv"
-	"time"
 
-	"github.com/gocolly/colly"
+	"github.com/gocolly/colly/v2"
 )
 
 type WatchlistPoster struct {
@@ -15,15 +15,15 @@ type WatchlistPoster struct {
 	Height          int    `csv:"Height"`
 	Width           int    `csv:"Width"`
 	CacheBustingKey string `csv:"CacheBustingKey"`
-	MetadataURL     string `csv:"MetadataURL` // should only ever need to construct this once for a new movie
 }
 
 type LetterboxdMovie struct {
-	ID          int       `csv:"ID"`
-	Name        string    `csv:"Name"`
-	ReleaseYear int16     `csv:"Year"`
-	CreatedAt   time.Time `csv:"Date"`
-	URI         string    `csv:"Letterboxd URI"`
+	ID          int    `csv:"ID"`
+	Name        string `csv:"Name"`
+	ReleaseYear int    `csv:"Year"`
+	// CreatedAt   time.Time `csv:"Date"`
+	URI         string `csv:"Letterboxd URI"`
+	MetadataURL string `csv:"Metadata URL`
 }
 
 const lbxdBaseURL = "https://letterboxd.com"
@@ -50,20 +50,26 @@ const (
 )
 
 func extractPoster(e *colly.HTMLElement) {}
-func onScraped()                         {} // called at the end of the whole scraping process
 func onPageHTML(e *colly.HTMLElement)    {}
 func onRequest(r *colly.Request)         {}
 
 func onResponse(r *colly.Response) {
-	fmt.Println("Response: ", r.Request.URL)
-	fmt.Println("Response: ", string(r.Body))
+	fmt.Println("Top Response: ", r.Request.URL)
+	// fmt.Println("Response: ", string(r.Body))
 }
 
 func onError() {}
 
-func metadataURL(p *WatchlistPoster) string {
-	url := "/ajax/poster%sstd/%dx%d?k=%s"
-	return fmt.Sprintf(url, p.Slug, p.Width, p.Height, p.CacheBustingKey)
+func onScraped(ms map[int]*LetterboxdMovie) {
+	// called at the end of the whole scraping process
+	for k, v := range ms {
+		fmt.Println(k, ": ", v)
+	}
+}
+
+func (p *WatchlistPoster) metadataURL() string {
+	url := "%s/ajax/poster%sstd/%dx%d?k=%s"
+	return fmt.Sprintf(url, lbxdBaseURL, p.Slug, p.Width, p.Height, p.CacheBustingKey)
 }
 
 func AttrInt(str string) int {
@@ -83,88 +89,74 @@ func NewWatchlistPoster(el *colly.HTMLElement) *WatchlistPoster {
 		Width:           AttrInt(el.Attr(SELECTOR_POSTER_WIDTH)),
 		CacheBustingKey: el.Attr(SELECTOR_POSTER_CACHE_BUSTING_KEY),
 	}
-	p.MetadataURL = metadataURL(p)
-
 	return p
 }
 
+func NewLetterboxdMovie(p *WatchlistPoster) LetterboxdMovie {
+	return LetterboxdMovie{
+		ID:          p.ID,
+		Name:        p.Name,
+		MetadataURL: p.metadataURL(),
+	}
+}
+
 func main() {
-	watchlistPosters := []WatchlistPoster{}
+	// watchlistPosters := []WatchlistPoster{}
+	movies := map[int]*LetterboxdMovie{}
 
 	collector := colly.NewCollector(
 		colly.CacheDir("./tmp"),
 	)
+
+	// TODO: parallelize collectors
+	posterMetadataCollector := collector.Clone()
+	// posterMetadataCollector.OnResponse(func(r *colly.Response) {
+	// 	fmt.Println("metadata response: ", r.Request.URL)
+
+	// })
+
+	posterMetadataCollector.OnHTML(".film-poster", func(el *colly.HTMLElement) {
+		fmt.Println("metadata html release year: ", AttrInt(el.Attr(SELECTOR_FILM_RELEASE_YEAR)))
+
+		// fmt.Println("el", el)
+		ID := AttrInt(el.Attr(SELECTOR_FILM_ID))
+		ry := AttrInt(el.Attr(SELECTOR_FILM_RELEASE_YEAR))
+
+		m := movies[ID]
+		m.ReleaseYear = ry
+	})
 
 	// collector.Async = true
 	// paginationCollector := collector.Clone()
 
 	collector.OnHTML(NODE_POSTER_CONTAINER, func(e *colly.HTMLElement) {
 		e.ForEach(NODE_POSTER, func(_ int, el *colly.HTMLElement) {
-
-			// ReleaseYear, ryerr := strconv.Atoi(el.Attr(SELECTOR_FILM_RELEASE_YEAR))
-			// if ryerr != nil {
-			// 	ReleaseYear = 0
-			// }
-
 			p := NewWatchlistPoster(el)
 
-			fmt.Println("Found a poster", p)
-			// fmt.Sprintf("Found a poster %+v, %s", p, metadataURL(p))
-			// fire up a filmCollector
-			// for each slug, we should visit the page and extract the metadata
+			m := NewLetterboxdMovie(p)
+			movies[p.ID] = &m
 
-			e.Request.Visit(p.MetadataURL)
-			watchlistPosters = append(watchlistPosters, *p)
+			err := posterMetadataCollector.Visit(p.metadataURL())
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			// watchlistPosters = append(watchlistPosters, *p)
 		})
 	})
 
-	// collector.OnResponse(func(r *colly.Response) {
-	// 	fmt.Println("RESPONSE", r.Request.URL)
-
-	// 	if strings.Index(r.Headers.Get("x-letterboxd-type"), "Film") > -1 {
-	// 		fmt.Println("r", r.Body)
-	// 	}
-	// })
-
-	// collector.OnHTML(NODE_POSTER_CONTAINER, func(e *colly.HTMLElement) {
-	// 	e.ForEach(NODE_POSTER, func(_ int, el *colly.HTMLElement) {
-
-	// 		ID, iderr := strconv.Atoi(el.Attr(SELECTOR_FILM_ID))
-
-	// 		if iderr != nil {
-	// 			ID = -1
-	// 		}
-
-	// 		ReleaseYear, ryerr := strconv.Atoi(el.Attr(SELECTOR_FILM_RELEASE_YEAR))
-	// 		if ryerr != nil {
-	// 			ReleaseYear = 0
-	// 		}
-
-	// 		p := LetterboxdMovie{
-	// 			ID:          ID,
-	// 			ReleaseYear: int16(ReleaseYear),
-	// 			Name:        el.Attr(SELECTOR_FILM_NAME),
-	// 			URI:         el.Attr(SELECTOR_FILM_SLUG),
-	// 		}
-
-	// 		fmt.Println("Found a poster", p)
-
-	// 		posters = append(posters, p)
-	// 	})
-	// })
-
+	counter := 0
 	collector.OnHTML(NODE_PAGINATION_NEXT_PAGE, func(e *colly.HTMLElement) {
+		counter++
 		nextPageURL := e.Attr("href")
 
-		fmt.Println("Next page", nextPageURL)
-		// e.Request.Visit(nextPage)
+		fmt.Println("Next page", nextPageURL, counter)
+		if counter < 3 {
+			e.Request.Visit(nextPageURL)
+		}
 	})
 
 	collector.OnResponse(onResponse)
-
-	// paginationCollector.OnHTML(NODE_PAGINATION_PAGE, func(e *colly.HTMLElement) {
-	// 	nextURL := e.Attr("href")
-	// })
 
 	// Set error handler
 	collector.OnError(func(r *colly.Response, err error) {
@@ -175,5 +167,13 @@ func main() {
 		fmt.Println("Requesting ", r.URL)
 	})
 
+	collector.OnScraped(func(r *colly.Response) {
+		onScraped(movies)
+	})
+
 	collector.Visit(watchlistBaseURL)
+
+	// TODO: allow revisiting URLs
+	// TODO: persist data as we crawl
+	// TODO: keep a key/value pair of pages visited
 }
