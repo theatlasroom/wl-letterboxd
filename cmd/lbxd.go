@@ -81,7 +81,7 @@ func AttrInt(str string) int {
 }
 
 func NewWatchlistPoster(el *colly.HTMLElement) *WatchlistPoster {
-	p := &WatchlistPoster{
+	return &WatchlistPoster{
 		ID:              AttrInt(el.Attr(SELECTOR_FILM_ID)),
 		Name:            el.DOM.Find("img").AttrOr("alt", ""),
 		Slug:            el.Attr(SELECTOR_FILM_SLUG),
@@ -89,7 +89,6 @@ func NewWatchlistPoster(el *colly.HTMLElement) *WatchlistPoster {
 		Width:           AttrInt(el.Attr(SELECTOR_POSTER_WIDTH)),
 		CacheBustingKey: el.Attr(SELECTOR_POSTER_CACHE_BUSTING_KEY),
 	}
-	return p
 }
 
 func NewLetterboxdMovie(p *WatchlistPoster) LetterboxdMovie {
@@ -118,16 +117,12 @@ func main() {
 	posterMetadataCollector.OnHTML(".film-poster", func(el *colly.HTMLElement) {
 		fmt.Println("metadata html release year: ", AttrInt(el.Attr(SELECTOR_FILM_RELEASE_YEAR)))
 
-		// fmt.Println("el", el)
 		ID := AttrInt(el.Attr(SELECTOR_FILM_ID))
 		ry := AttrInt(el.Attr(SELECTOR_FILM_RELEASE_YEAR))
 
 		m := movies[ID]
 		m.ReleaseYear = ry
 	})
-
-	// collector.Async = true
-	// paginationCollector := collector.Clone()
 
 	collector.OnHTML(NODE_POSTER_CONTAINER, func(e *colly.HTMLElement) {
 		e.ForEach(NODE_POSTER, func(_ int, el *colly.HTMLElement) {
@@ -140,8 +135,6 @@ func main() {
 			if err != nil {
 				log.Fatal(err)
 			}
-
-			// watchlistPosters = append(watchlistPosters, *p)
 		})
 	})
 
