@@ -18,15 +18,21 @@ func main() {
 
 	posterMetadataCollector := collector.Clone()
 
+	out := make(chan interface{}, 100)
+
 	posterMetadataCollector.OnHTML(lbxd.NODE_POSTER, func(el *colly.HTMLElement) {
-		ID := lbxd.AttrInt(el.Attr(lbxd.SELECTOR_FILM_ID))
-		ry := lbxd.AttrInt(el.Attr(lbxd.SELECTOR_FILM_RELEASE_YEAR))
-
-		m := movies[ID]
-		m.ReleaseYear = ry
-
-		fmt.Println(m)
+		lbxd.OnPoster(el, out)
 	})
+
+	// posterMetadataCollector.OnHTML(lbxd.NODE_POSTER, func(el *colly.HTMLElement) {
+	// 	ID := lbxd.AttrInt(el.Attr(lbxd.SELECTOR_FILM_ID))
+	// 	ry := lbxd.AttrInt(el.Attr(lbxd.SELECTOR_FILM_RELEASE_YEAR))
+
+	// 	m := movies[ID]
+	// 	m.ReleaseYear = ry
+
+	// 	fmt.Println(m)
+	// })
 
 	collector.OnHTML(lbxd.NODE_POSTER_CONTAINER, func(e *colly.HTMLElement) {
 		e.ForEach(lbxd.NODE_POSTER, func(_ int, el *colly.HTMLElement) {
